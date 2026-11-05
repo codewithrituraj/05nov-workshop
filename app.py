@@ -162,6 +162,41 @@ def create_registration(user: Any, token: str):
         return error_response(api_error_message(error), 500)
 
 
+@app.post("/api/demo/registrations")
+def create_demo_registration():
+    """Persist the no-login demo account registration in Supabase."""
+    body = request.get_json(silent=True) or {}
+    event_id = body.get("event_id")
+    if not isinstance(event_id, str) or not event_id.strip():
+        return error_response("event_id is required", 400)
+
+    try:
+        event = (supabase.table("events").select("event_id").eq("event_id", event_id)
+                 .maybe_single().execute())
+        if not event.data:
+            return error_response("Event not found", 404)
+        registration = (supabase.table("demo_registrations")
+                        .insert({"demo_user": "demo", "event_id": event_id})
+                        .select("*").single().execute())
+        return jsonify(registration.data), 201
+    except APIError as error:
+        if error.code == "23505" or "duplicate" in api_error_message(error).lower():
+            return error_response("Already registered for this event", 409)
+        return error_response(api_error_message(error), 500)
+    except Exception as error:
+        return error_response(api_error_message(error), 500)
+
+
+@app.get("/api/demo/registrations")
+def list_demo_registrations():
+    try:
+        result = (supabase.table("demo_registrations").select("event_id, created_at")
+                  .eq("demo_user", "demo").order("created_at", desc=True).execute())
+        return jsonify(result.data), 200
+    except Exception as error:
+        return error_response(api_error_message(error), 500)
+
+
 @app.get("/api/me/registrations")
 @authenticated
 def my_registrations(user: Any, token: str):
