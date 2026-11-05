@@ -25,54 +25,54 @@ create table if not exists public.registrations (
   unique (student_id, event_id)
 );
 
+create table if not exists public.demo_registrations (
+  id uuid primary key default gen_random_uuid(),
+  demo_user text not null default 'demo' check (demo_user = 'demo'),
+  event_id uuid not null references public.events(event_id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (demo_user, event_id)
+);
+
 create index if not exists events_student_id_idx on public.events(student_id);
 create index if not exists registrations_student_id_idx on public.registrations(student_id);
 create index if not exists registrations_event_id_idx on public.registrations(event_id);
+create index if not exists demo_registrations_event_id_idx on public.demo_registrations(event_id);
 
 alter table public.users enable row level security;
 alter table public.events enable row level security;
 alter table public.registrations enable row level security;
+alter table public.demo_registrations enable row level security;
 
 drop policy if exists "public can browse events" on public.events;
-create policy "public can browse events" on public.events
-  for select to anon, authenticated using (true);
+create policy "public can browse events" on public.events for select to anon, authenticated using (true);
 
 drop policy if exists "users can create their own events" on public.events;
-create policy "users can create their own events" on public.events
-  for insert to authenticated
-  with check ((select auth.uid()) = student_id);
+create policy "users can create their own events" on public.events for insert to authenticated with check ((select auth.uid()) = student_id);
 
 drop policy if exists "users can view their own profile" on public.users;
-create policy "users can view their own profile" on public.users
-  for select to authenticated
-  using ((select auth.uid()) = uuid);
+create policy "users can view their own profile" on public.users for select to authenticated using ((select auth.uid()) = uuid);
 
 drop policy if exists "users can create their own profile" on public.users;
-create policy "users can create their own profile" on public.users
-  for insert to authenticated
-  with check ((select auth.uid()) = uuid);
+create policy "users can create their own profile" on public.users for insert to authenticated with check ((select auth.uid()) = uuid);
 
 drop policy if exists "students can view their registrations" on public.registrations;
-create policy "students can view their registrations" on public.registrations
-  for select to authenticated
-  using ((select auth.uid()) = student_id);
+create policy "students can view their registrations" on public.registrations for select to authenticated using ((select auth.uid()) = student_id);
 
 drop policy if exists "organizers can view event registrations" on public.registrations;
-create policy "organizers can view event registrations" on public.registrations
-  for select to authenticated
-  using (exists (
-    select 1 from public.events e
-    where e.event_id = registrations.event_id
-      and e.student_id = (select auth.uid())
-  ));
+create policy "organizers can view event registrations" on public.registrations for select to authenticated using (exists (select 1 from public.events e where e.event_id = registrations.event_id and e.student_id = (select auth.uid())));
 
 drop policy if exists "students can register themselves" on public.registrations;
-create policy "students can register themselves" on public.registrations
-  for insert to authenticated
-  with check ((select auth.uid()) = student_id);
+create policy "students can register themselves" on public.registrations for insert to authenticated with check ((select auth.uid()) = student_id);
+
+drop policy if exists "public demo can read demo registrations" on public.demo_registrations;
+create policy "public demo can read demo registrations" on public.demo_registrations for select to anon, authenticated using (demo_user = 'demo');
+
+drop policy if exists "public demo can create demo registrations" on public.demo_registrations;
+create policy "public demo can create demo registrations" on public.demo_registrations for insert to anon, authenticated with check (demo_user = 'demo');
 
 grant select on public.events to anon, authenticated;
 grant select on public.users to authenticated;
 grant select, insert on public.registrations to authenticated;
 grant insert on public.events to authenticated;
 grant insert on public.users to authenticated;
+grant select, insert on public.demo_registrations to anon, authenticated;
